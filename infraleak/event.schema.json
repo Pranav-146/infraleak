@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "InfraLeak event",
+  "type": "object",
+  "required": ["episode_id", "eid", "t", "layer", "actor", "op", "resource", "owner", "content", "meta"],
+  "additionalProperties": false,
+  "properties": {
+    "episode_id": {"type": "string"},
+    "eid": {"type": "integer", "minimum": 0},
+    "t": {"type": "integer", "minimum": 0},
+    "layer": {"enum": ["app", "service"]},
+    "actor": {"enum": ["A", "B"]},
+    "op": {"enum": ["list", "read", "write", "search", "reply"]},
+    "resource": {"type": "string"},
+    "owner": {"type": "string"},
+    "content": {"type": "string"},
+    "meta": {"type": "object"}
+  }
+}

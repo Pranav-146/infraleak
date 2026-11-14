@@ -1,0 +1,8 @@
+[project]
+name = "infraleak"
+version = "0.1.0"
+description = "Dataset + evaluation harness for cross-agent information flow via shared infrastructure under partial observability"
+requires-python = ">=3.10"
+dependencies = ["pyyaml", "jsonschema", "requests", "pytest"]
+[tool.pytest.ini_options]
+testpaths = ["tests"]

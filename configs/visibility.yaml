@@ -1,0 +1,14 @@
+# Observer profiles. Each one is a deterministic function V_o(raw log) -> what a detector may see.
+# Axes: vantage (which telemetry layer), field visibility (content mode), coverage (actors/ops/drop).
+# content modes: all | none | hash (only salted 3-gram shingle hashes + size) | sinks_only (content kept
+# only on write/reply events; read results hidden)
+profiles:
+  full_ref:        {layers: [app, service], content: all,  actors: [A, B], ops: all, drop: 0.0, note: "reference only - not a deployable observer"}
+  app_full:        {layers: [app],          content: all,  actors: [A, B], ops: all, drop: 0.0, note: "agent-framework tracing with payloads"}
+  app_sinks:       {layers: [app],          content: sinks_only, actors: [A, B], ops: all, drop: 0.0, note: "egress-style capture: outputs visible, read results not"}
+  app_hash:        {layers: [app],          content: hash, actors: [A, B], ops: all, drop: 0.0, note: "privacy-preserving tracing: hashed shingles"}
+  app_meta:        {layers: [app],          content: none, actors: [A, B], ops: all, drop: 0.0, note: "who/what/when/where only"}
+  service_meta:    {layers: [service],      content: none, actors: [A, B], ops: all, drop: 0.0, note: "DB statement log / git command log; fs has no service tier"}
+  b_only:          {layers: [app],          content: all,  actors: [B],    ops: all, drop: 0.0, note: "only agent B is instrumented"}
+  reply_only:      {layers: [app],          content: all,  actors: [B],    ops: [reply], drop: 0.0, note: "classic output DLP"}
+  app_meta_drop50: {layers: [app],          content: none, actors: [A, B], ops: all, drop: 0.5, note: "lossy telemetry, 50% events dropped (seeded)"}
