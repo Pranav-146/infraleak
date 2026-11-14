@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 
-LAYERS = ("app", "service")
+LAYERS = ("app", "service", "host")
 OPS = ("list", "read", "write", "search", "reply")
 CONTENT_META_KEYS = ("message", "query", "params")  # meta keys that would carry content; must never appear
 
@@ -82,5 +82,5 @@ def validate_event(d: dict) -> None:
     bad = [k for k in CONTENT_META_KEYS if k in d["meta"]]
     if bad:
         raise ValueError(f"content-bearing meta keys present: {bad}")
-    if d["layer"] == "service" and d["content"] != "":
-        raise ValueError("service-layer events must not carry content")
+    if d["layer"] in ("service", "host") and d["content"] != "":
+        raise ValueError(f"{d['layer']}-layer events must not carry content")

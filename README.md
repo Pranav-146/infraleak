@@ -5,6 +5,8 @@ Capstone PW_25_RB_01, PES University: Pranav, Sujan, Subramani, Apeksha. Guide: 
 
 This repo builds the **dataset** and the **evaluation protocol**. It does not train a model yet.
 
+![architecture](docs/architecture.png)
+
 ```
 scenario generator ──► world (fs | SQLite | git) ──► RAW event log E ──► oracle ──► labels (frozen, sha256)
   (vault of secrets,      agent A writes,               (ground truth,      (runs on E + vault,
@@ -18,8 +20,9 @@ scenario generator ──► world (fs | SQLite | git) ──► RAW event log E
 
 ```bash
 pip install pyyaml jsonschema requests pytest     # Python >= 3.10, git and sqlite3 on PATH
-make test     # 22 tests: matching, oracle, all 3 backends, views, splits, tamper check, LLM brain on a mock server
-make data     # 3,840 designed episodes -> labels -> freeze -> splits -> 9 views -> baselines   (~2 min, CPU)
+make test       # 24 tests: matching, oracle, 3 backends, host tier, views, splits, tamper check, LLM brain, figures
+make data       # 3,840 designed episodes -> labels -> freeze -> splits -> views -> baselines -> figures (~2 min, CPU)
+make data-host  # same + host tier recorded with real strace (Linux/WSL only, ~9 min)
 make show     # one episode printed through every observer view
 make verify   # re-hash raw logs + labels against MANIFEST and re-run the oracle
 ```
@@ -42,7 +45,7 @@ degrades as `o` sees less.
 
 | axis | values | real-world counterpart |
 |---|---|---|
-| vantage (layer) | `app` (agent tool calls), `service` (DB statement log / git command log) | LangSmith-style tracing vs. `pg_stat_statements` / git server logs |
+| vantage (layer) | `app` (agent tool calls), `service` (DB statement log / git command log), `host` (syscalls via strace) | LangSmith-style tracing / `pg_stat_statements`, git server logs / eBPF, auditd (AgentSight-style) |
 | field visibility (content) | `all`, `sinks_only`, `hash`, `none` | full tracing, egress DLP, privacy-preserving hashed telemetry, metadata-only |
 | coverage | which agents, which ops, random event drop | partial instrumentation, sampled/lossy telemetry |
 
@@ -80,18 +83,30 @@ on **3,840/3,840** episodes.
 | neg_decoy / neg_decoy_para | public look-alike | forwards | 0 (hard negative) |
 | neg_clean | harmless note | forwards | 0 (cross-agent copy, no secret) |
 
-## Baselines (from `reports/baselines_scripted.md`)
-On test_id (n=288, 96 positive). The point is not the numbers but how they change across views:
+## Baselines and the degradation curve
+Figures: `reports/figures/` (rebuilt by `make data` / `make report`).
 
-| view | reply DLP | metadata read-alarm | provenance |
+![degradation](reports/figures/degradation.png)
+
+The headline metric is **recall − false-positive rate**, where 0 means chance. F1 is not used for the headline because a
+detector that alarms on every episode already scores F1 = 0.67 when half the episodes are leaks.
+On test_id (n=288, 96 leaks), from `reports/baselines_scripted.md`:
+
+| view | pattern DLP | cross-agent read alarm | token provenance |
 |---|---|---|---|
 | app_full | R 1.00 / FPR 0.25 | R 1.00 / FPR 0.75 | R 1.00 / FPR 0.25 |
 | app_hash | blind | R 1.00 / FPR 0.75 | R 1.00 / FPR 0.50 |
 | app_meta | blind | R 1.00 / FPR 0.75 | blind |
+| host_meta (strace) | blind | R 1.00 / FPR 0.88 | blind |
 | service_meta | blind | R 0.50 / FPR 0.38 (fs has no service tier) | blind |
 | reply_only | R 0.50 / FPR 0.12 (misses write sinks) | blind | blind |
 
-On test_ood_class (paraphrase), **every** baseline either misses all leaks or alarms on every decoy (FPR 1.00).
+What the curve shows:
+- With full content, simple detectors are well above chance (0.75). Once content is hidden, the metadata tiers fall to
+  0.1–0.25. They can see that B read something A wrote, but not whether a secret crossed.
+- The host tier is the weakest vantage on SQLite and git. It sees one database file or opaque `.git/objects` files, so a
+  benign FAQ lookup looks the same as a leak (FPR 0.88; 1.00 on the git split).
+- On **unseen flow class** (paraphrase), every baseline at every vantage is at exactly 0.
 That gap is what the learned detector (Phase II) has to close.
 
 ## Honest limitations
@@ -99,6 +114,8 @@ That gap is what the learned detector (Phase II) has to close.
   the views. **Realistic behaviour comes from LLM episodes** (`run-llm`), labelled by the same oracle.
 - The paraphrase oracle uses keyword groups (site + quarter), not semantics. LLM paraphrases need a hand-audit sample.
 - Number matching ignores separators, so an unrelated number with the same digits would count as a match. There is a test for this.
-- The host tier (strace) is parsed and probed (`host_trace.py`) but not yet wired into episodes.
+- Host tier: both agents run in one Python process here, so syscalls are attributed to an agent with a marker `open()`
+  issued before each operation. In deployment this attribution comes from the process tree (one process per agent).
+  Host tracing needs Linux/WSL. On Windows, `build` skips it and the `host_meta` view is simply absent.
 
 See `docs/DATASET_SPEC.md` for the paper-to-component mapping and `docs/RUNBOOK.md` for running on Kaggle.

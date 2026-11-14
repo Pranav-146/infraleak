@@ -17,13 +17,13 @@ def sha256_file(p: Path) -> str:
     return hashlib.sha256(Path(p).read_bytes()).hexdigest()
 
 
-def generate(specs, data: Path, brain, resume=True, log_every=200):
+def generate(specs, data: Path, brain, resume=True, log_every=200, host_marks=False):
     raw = data / "raw"
     n = 0
     for spec in specs:
         if resume and (raw / spec.episode_id / "run_meta.json").exists():
             continue
-        run_episode(spec, raw, brain)
+        run_episode(spec, raw, brain, host_marks=host_marks)
         n += 1
         if log_every and n % log_every == 0:
             print(f"  ran {n} episodes")
@@ -82,6 +82,24 @@ def load_labels(data: Path):
 def load_specs(data: Path, ids):
     from .schema import ScenarioSpec
     return {i: ScenarioSpec.from_dict(json.loads((data / "raw" / i / "spec.json").read_text())) for i in ids}
+
+
+def present_layers(data: Path, ids):
+    layers = set()
+    for i in ids:
+        with open(data / "raw" / i / "events.jsonl") as f:
+            for line in f:
+                layers.add(json.loads(line)["layer"])
+        if layers >= {"app", "service", "host"}:
+            break
+    return layers
+
+
+def usable_profiles(data: Path, labels, profiles=None):
+    """Drop profiles whose layers never occur (e.g. host_meta when the run was not traced)."""
+    profiles = profiles or load_profiles()
+    have = present_layers(data, [L["episode_id"] for L in labels])
+    return {p: c for p, c in profiles.items() if set(c["layers"]) & have}
 
 
 def build_views(data: Path, labels, profiles=None):

@@ -1,0 +1,26 @@
+digraph G {
+  graph [rankdir=LR, bgcolor="#fcfcfb", fontname="DejaVu Sans", nodesep=0.5, ranksep=0.45, pad=0.3, splines=spline];
+  node  [shape=box, style="rounded,filled", fillcolor="#ffffff", color="#9b9a95", fontname="DejaVu Sans", fontsize=11, fontcolor="#0b0b0b", penwidth=1.2, margin="0.14,0.08"];
+  edge  [color="#52514e", fontname="DejaVu Sans", fontsize=9, fontcolor="#52514e", arrowsize=0.7, penwidth=1.3];
+
+  gen   [label=<<b>Scenario generator</b><br/>4 domains · 4 tasks · 8 designs<br/>secret vault + public decoys>, fillcolor="#fdf3e3"];
+  bed   [label=<<b>Testbed (real infrastructure)</b><br/>Agent A (has private doc) → <i>shared store</i> → Agent B<br/>filesystem · SQLite · git>, fillcolor="#e8f0fb"];
+  raw   [shape=record, style="rounded,filled", fillcolor="#f2f1ee",
+         label="<h> Raw log E\n(ground truth only)|<a> app tier\ntool calls + content|<s> service tier\nSQL / git commands, no values|<o> host tier\nstrace syscalls, no content"];
+  oracle[label=<<b>Oracle</b><br/>vault + raw log<br/>exposure → access → transfer>, fillcolor="#fdf3e3"];
+  labels[label=<<b>Labels</b><br/>frozen with sha256<br/>before any detector runs>, fillcolor="#fdf3e3"];
+  splits[label=<<b>Splits</b><br/>train · val · test_id<br/>OOD domain / channel / class<br/>test labels sealed>, fillcolor="#fdf3e3"];
+  prof  [label=<<b>Observer profiles</b><br/>visibility.yaml<br/>vantage · content · coverage>, fillcolor="#eaf6f0"];
+  views [label=<<b>Views V<sub>o</sub>(E)</b><br/>deterministic masked logs>, fillcolor="#eaf6f0"];
+  det   [label=<<b>Detectors</b><br/>DLP · read alarm · provenance<br/>(learned model: Phase II)>, fillcolor="#eaf6f0"];
+  ev    [label=<<b>Evaluation</b><br/>P / R / F1 / FPR + 95% CI<br/>degradation curves>];
+
+  gen -> bed [label="tasks"];
+  bed -> raw [label="every op logged"];
+  raw -> oracle -> labels -> splits;
+  raw -> views; prof -> views; views -> det;
+  splits -> ev; det -> ev;
+  { rank=same; raw; prof; }
+  { rank=same; oracle; views; }
+  { rank=same; labels; det; }
+}
