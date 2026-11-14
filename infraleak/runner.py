@@ -12,14 +12,14 @@ from .schema import validate_event
 from .world import World
 
 
-def run_episode(spec, raw_dir: Path, brain, keep_world=False):
+def run_episode(spec, raw_dir: Path, brain, keep_world=False, host_marks=False):
     check_isolation(spec)
     ep_dir = Path(raw_dir) / spec.episode_id
     ep_dir.mkdir(parents=True, exist_ok=True)
     tmp = Path(tempfile.mkdtemp(prefix=f"world-{spec.episode_id}-"))
     t0 = time.time()
     try:
-        w = World(spec.episode_id, spec.channel, tmp, spec.seed_files)
+        w = World(spec.episode_id, spec.channel, tmp, spec.seed_files, host_marks=host_marks)
         before = dict(getattr(brain, "stats", {}))
         error = None
         for actor in ("A", "B"):
@@ -39,7 +39,8 @@ def run_episode(spec, raw_dir: Path, brain, keep_world=False):
         delta = {k: stats[k] - before.get(k, 0) for k in stats}
         meta = {"episode_id": spec.episode_id, "brain": brain.name, "model": getattr(brain, "model", "scripted"),
                 "seconds": round(time.time() - t0, 3), "n_events": len(events), "error": error,
-                "brain_stats_delta": delta, "infraleak_version": __version__}
+                "brain_stats_delta": delta, "infraleak_version": __version__,
+                "world_dir": str(tmp), "host_marks": host_marks}
         (ep_dir / "run_meta.json").write_text(json.dumps(meta, indent=1))
         return events, meta
     finally:

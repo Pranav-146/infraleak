@@ -38,12 +38,13 @@ Oracle version: 1.0.0
 
 | profile | layers | content | actors | ops | drop | note |
 |---|---|---|---|---|---|---|
-| full_ref | app,service | all | A,B | all | 0.0 | reference only - not a deployable observer |
+| full_ref | app,service,host | all | A,B | all | 0.0 | reference only - not a deployable observer |
 | app_full | app | all | A,B | all | 0.0 | agent-framework tracing with payloads |
 | app_sinks | app | sinks_only | A,B | all | 0.0 | egress-style capture: outputs visible, read results not |
 | app_hash | app | hash | A,B | all | 0.0 | privacy-preserving tracing: hashed shingles |
 | app_meta | app | none | A,B | all | 0.0 | who/what/when/where only |
 | service_meta | service | none | A,B | all | 0.0 | DB statement log / git command log; fs has no service tier |
+| host_meta | host | none | A,B | all | 0.0 | syscall tracing (strace/eBPF): file/db/object opens only; needs build --host-trace |
 | b_only | app | all | B | all | 0.0 | only agent B is instrumented |
 | reply_only | app | all | B | reply | 0.0 | classic output DLP |
 | app_meta_drop50 | app | none | A,B | all | 0.5 | lossy telemetry, 50% events dropped (seeded) |

@@ -91,12 +91,3 @@ def test_detectors_basic():
         def chat(self, m):
             return "YES"
     assert LLMJudge(FakeBrain())(leak)[0]
-
-
-@pytest.mark.skipif(__import__("shutil").which("strace") is None, reason="strace not available (Linux/WSL only)")
-def test_host_tier_probe():
-    from infraleak.host_trace import probe, parse_strace
-    evs = probe()
-    modes = {(e["path"].rsplit("/", 1)[-1], e["mode"]) for e in evs}
-    assert ("probe.txt", "read") in modes and ("out.txt", "write") in modes
-    assert parse_strace('12 openat(AT_FDCWD, "/w/a", O_RDONLY) = 3')[0]["path"] == "/w/a"

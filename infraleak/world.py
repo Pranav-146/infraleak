@@ -53,7 +53,7 @@ class FSChannel:
         f.write_text(c)
 
     def list(self, prefix):
-        out = sorted(str(f.relative_to(self.root)) for f in self.root.rglob("*") if f.is_file())
+        out = sorted(f.relative_to(self.root).as_posix() for f in self.root.rglob("*") if f.is_file())
         return [p for p in out if p.startswith(prefix)], None
 
     def read(self, p):
@@ -122,7 +122,7 @@ class GitChannel:
     def _git(self, *args, actor="system", check=True):
         env = dict(os.environ, GIT_AUTHOR_NAME=actor, GIT_AUTHOR_EMAIL=f"{actor}@agents.local",
                    GIT_COMMITTER_NAME=actor, GIT_COMMITTER_EMAIL=f"{actor}@agents.local",
-                   GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1")
+                   GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1")
         r = subprocess.run(["git", *args], cwd=self.dir, env=env, capture_output=True, text=True)
         if check and r.returncode != 0:
             raise RuntimeError(r.stderr)
@@ -171,8 +171,9 @@ CHANNEL_CLASSES = {"fs": FSChannel, "sqlite": SQLiteChannel, "git": GitChannel}
 
 
 class World:
-    def __init__(self, episode_id: str, channel: str, root: Path, seed_files: dict):
+    def __init__(self, episode_id: str, channel: str, root: Path, seed_files: dict, host_marks: bool = False):
         self.episode_id = episode_id
+        self.root, self.host_marks = Path(root), host_marks
         self.ch = CHANNEL_CLASSES[channel](Path(root))
         self.ch.seed(seed_files)
         self.owners = {p: "system" for p in seed_files}
@@ -184,11 +185,26 @@ class World:
         self.events.append(Event(self.episode_id, len(self.events), self.t, layer, actor, op, resource,
                                  owner, content, meta))
 
+    def mark(self, actor):
+        """Host-tier attribution marker: a deliberately failing open() whose path encodes (t, actor).
+        Here both agents share one process; in deployment attribution comes from the process tree."""
+        if self.host_marks:
+            try:
+                os.open(str(self.root / ".mark" / f"{self.t}-{actor}"), os.O_RDONLY)
+            except OSError:
+                pass
+
     def _op(self, actor, op, resource, owner, content, app_meta, svc_meta):
         self.t += 1
         if svc_meta is not None:
             self._emit("service", actor, op, resource, owner, "", svc_meta)
         self._emit("app", actor, op, resource, owner, content, app_meta)
+
+    def t_next(self, actor):
+        """Called just before a backend operation: marks the upcoming op's clock value t+1."""
+        self.t += 1
+        self.mark(actor)
+        self.t -= 1
 
     def handle(self, actor: str) -> "AgentHandle":
         return AgentHandle(self, actor)
@@ -202,6 +218,7 @@ class AgentHandle:
 
     def list(self, prefix: str = "") -> str:
         prefix = clean_path(prefix)
+        self.w.t_next(self.actor)
         rows, svc = self.w.ch.list(prefix)
         out = "\n".join(rows) if rows else "(empty)"
         self.w._op(self.actor, "list", prefix or "/", "", out, {"n": len(rows)}, svc)
@@ -213,6 +230,7 @@ class AgentHandle:
         except PathError as e:
             self.w._op(self.actor, "read", str(path), "", f"ERROR: {e}", {"ok": False}, None)
             return f"ERROR: {e}"
+        self.w.t_next(self.actor)
         body, svc = self.w.ch.read(p)
         out = body if body is not None else f"ERROR: {p} not found"
         self.w._op(self.actor, "read", p, self.w.owners.get(p, ""), out,
@@ -227,12 +245,14 @@ class AgentHandle:
             return f"ERROR: {e}"
         if not p:
             return "ERROR: empty path"
+        self.w.t_next(self.actor)
         svc = self.w.ch.write(p, content, self.actor)
         self.w.owners[p] = self.actor
         self.w._op(self.actor, "write", p, self.actor, content, {"ok": True, "bytes": len(content)}, svc)
         return f"wrote {len(content)} bytes to {p}"
 
     def search(self, query: str) -> str:
+        self.w.t_next(self.actor)
         hits, svc = self.w.ch.search(query)
         out = "\n".join(f"{p}:{i}: {line}" for p, i, line in hits) if hits else "(no matches)"
         owners = sorted({self.w.owners.get(p, "") for p, _, _ in hits})

@@ -7,7 +7,7 @@ Files per episode under `data/<set>/raw/<episode_id>/`:
 - `events.jsonl` – raw log E (schema `infraleak/event.schema.json`)
 - `run_meta.json` – brain/model, timing, malformed-action counts, errors
 
-Event = `(episode_id, eid, t, layer, actor, op, resource, owner, content, meta)`. This is MAScope's
+Event = `(episode_id, eid, t, layer, actor, op, resource, owner, content, meta)`, layer ∈ {app, service, host}; service and host events never carry content. This is MAScope's
 actor/action/resource/content tuple plus `owner` (who last wrote the resource) and `layer`.
 
 ## Secrets (vault) per episode
@@ -37,7 +37,7 @@ corporate (Meridian Systems) × filesystem, SQLite (parameterised, statement log
 | secret vault, allowed-disclosure set, canary → pattern → judge staging | AgentLeak |
 | template × channel × flow-class matrix, hard negatives, frozen labels before detection | TaintBench / NeuroTaint |
 | event tuple schema | MAScope |
-| host tier (syscall tracing) | AgentSight / Agent-Warden (prototype in `host_trace.py`) |
+| host tier (strace syscalls, marker-based agent attribution, `build --host-trace`) | AgentSight / Agent-Warden |
 | policy-rule baseline, realistic task sources (Phase II) | PCAS, τ²-bench |
 | held-out public scenarios for OOD (planned) | NARCBench (CI/CD → git, RAG → shared memory) |
 

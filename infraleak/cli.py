@@ -19,29 +19,63 @@ def _llm(args):
                     temperature=args.temperature, max_steps=args.max_steps)
 
 
+def _step(msg):
+    print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
+
+
 def finalize(data: Path, judge=None):
+    _step("labelling episodes with the oracle (raw log + vault)")
     labels = P.label_all(data)
+    _step(f"freezing {len(labels)} labels (sha256 manifest)")
     P.freeze(data)
     specs = P.load_specs(data, [L["episode_id"] for L in labels])
+    _step("assigning splits + leakage checks")
     stats = check_splits(labels, specs)
-    profiles = load_profiles()
+    profiles = P.usable_profiles(data, labels)
+    _step(f"building {len(profiles)} observer views: {', '.join(profiles)}")
     views = P.build_views(data, labels, profiles)
+    _step("writing release (train/val views+labels, test views only; test labels sealed)")
     P.write_release(data, labels, views)
     P.dataset_card(labels, stats, data, profiles)
     dets = default_detectors() + ([LLMJudge(judge)] if judge else [])
+    _step(f"evaluating {len(dets)} detectors x {len(profiles)} views x {len(P.EVAL_SPLITS)} splits")
     res = evaluate(labels, views, dets, P.EVAL_SPLITS)
     write_results(res, data / "results")
+    _step("figures")
+    try:
+        from .report import make_figures
+        make_figures(data / "results")
+    except ImportError as ex:
+        print(f"  (skipped figures: {ex}; pip install matplotlib)")
+    _step("verifying manifest + oracle reproducibility")
     P.verify(data)
     return labels, stats
+
+
+def cmd_gen(a):
+    from .brains.scripted import ScriptedBrain
+    specs = list(scripted_grid(a.seeds))
+    _step(f"running {len(specs)} scripted episodes -> {a.data}/raw" + (" (host markers on)" if a.host_marks else ""))
+    P.generate(specs, Path(a.data), ScriptedBrain(), host_marks=a.host_marks)
 
 
 def cmd_build(a):
     data = Path(a.data)
     t = time.time()
-    specs = list(scripted_grid(a.seeds))
-    from .brains.scripted import ScriptedBrain
-    print(f"running {len(specs)} scripted episodes -> {data}/raw")
-    P.generate(specs, data, ScriptedBrain())
+    if a.host_trace:
+        from .host_trace import strace_available, run_traced, ingest
+        if not strace_available():
+            raise SystemExit("--host-trace needs strace (Linux / WSL). Run without it on Windows/macOS.")
+        data.mkdir(parents=True, exist_ok=True)
+        trace = data / "host.strace"
+        _step("generating under strace -f (host tier)")
+        run_traced(["-m", "infraleak.cli", "gen", "--data", str(data), "--seeds", str(a.seeds), "--host-marks"], trace)
+        _step(f"ingesting host trace ({trace.stat().st_size / 1e6:.0f} MB)")
+        print("  ", ingest(trace, data / "raw"))
+        if not a.keep_trace:
+            trace.unlink()
+    else:
+        cmd_gen(argparse.Namespace(data=str(data), seeds=a.seeds, host_marks=False))
     labels, stats = finalize(data)
     print(json.dumps(stats, indent=1))
     print(f"done in {time.time() - t:.1f}s; see {data}/DATASET_CARD.md and {data}/results/summary.md")
@@ -115,7 +149,9 @@ def cmd_show(a):
     print("--- [oracle:...] column is annotation for humans; it is NOT part of any view")
     print(f"--- oracle: label={L['label']} class={L['flow_class']} stages={L['stages']} edges={L['edges']}")
     profs = load_profiles()
-    for p in ["full_ref"] + [x for x in (a.profiles.split(",") if a.profiles else profs) if x != "full_ref"]:
+    have = {e["layer"] for e in events}
+    profs = {k: v for k, v in profs.items() if set(v["layers"]) & have}
+    for p in ["full_ref"] + [x for x in (a.profiles.split(",") if a.profiles else profs) if x != "full_ref" and x in profs]:
         v = apply_view(events, p, profs[p])
         print(f"\n--- view: {p}  ({profs[p]['note']})  {len(v)} events")
         for e in v:
@@ -139,7 +175,17 @@ def main(argv=None):
     p = sub.add_parser("build", help="scripted (designed) dataset end to end")
     p.add_argument("--data", default="data/scripted")
     p.add_argument("--seeds", type=int, default=10)
+    p.add_argument("--host-trace", action="store_true", help="also record the host tier with strace (Linux/WSL)")
+    p.add_argument("--keep-trace", action="store_true")
     p.set_defaults(f=cmd_build)
+    p = sub.add_parser("gen", help="generate raw scripted episodes only")
+    p.add_argument("--data", default="data/scripted")
+    p.add_argument("--seeds", type=int, default=10)
+    p.add_argument("--host-marks", action="store_true")
+    p.set_defaults(f=cmd_gen)
+    p = sub.add_parser("report", help="(re)draw figures from results/metrics.csv")
+    p.add_argument("--data", default="data/scripted")
+    p.set_defaults(f=lambda a: print(__import__("infraleak.report", fromlist=["x"]).make_figures(Path(a.data) / "results")))
     p = sub.add_parser("run-llm", help="spontaneous LLM episodes (resumable)")
     p.add_argument("--data", default="data/llm")
     p.add_argument("--seeds", type=int, default=5)
