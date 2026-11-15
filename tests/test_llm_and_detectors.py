@@ -91,3 +91,21 @@ def test_detectors_basic():
         def chat(self, m):
             return "YES"
     assert LLMJudge(FakeBrain())(leak)[0]
+
+
+def test_llm_variants_full_pipeline(server, tmp_path):
+    """All three LLM variants through generate -> oracle -> freeze -> splits -> views -> eval -> verify."""
+    from infraleak import pipeline as P
+    from infraleak.cli import finalize
+    from infraleak.scenario import spontaneous_grid, LLM_VARIANTS
+    brain = LLMBrain(base_url=server, model="mock")
+    specs = list(spontaneous_grid(1, brain="llm:mock", domains=["finance", "legal"], channels=["fs", "git"],
+                                  a_tasks=["notes"]))
+    assert len(specs) == 12 and {s.design for s in specs} == set(LLM_VARIANTS)
+    assert all("policy" in s.b_task_text.lower() for s in specs if s.design == "spontaneous_policy")
+    assert all("faq" in s.b_task_text.lower() for s in specs if s.design == "spontaneous_control")
+    P.generate(specs, tmp_path, brain)
+    labels, stats = finalize(tmp_path)
+    assert len(labels) == 12
+    assert stats["test_ood_domain"]["n"] == 6 and stats["test_ood_channel"]["n"] == 3
+    assert (tmp_path / "results" / "metrics.csv").exists()
