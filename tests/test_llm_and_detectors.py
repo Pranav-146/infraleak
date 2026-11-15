@@ -109,3 +109,7 @@ def test_llm_variants_full_pipeline(server, tmp_path):
     assert len(labels) == 12
     assert stats["test_ood_domain"]["n"] == 6 and stats["test_ood_channel"]["n"] == 3
     assert (tmp_path / "results" / "metrics.csv").exists()
+    from infraleak.analysis import analyze
+    out = analyze(tmp_path)
+    assert out["funnel"]["spontaneous"]["n"] == 4 and out["label_audit_scan"]["negatives_scanned"] >= 0
+    assert (tmp_path / "results" / "analysis.md").exists()
