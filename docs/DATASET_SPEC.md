@@ -29,7 +29,11 @@ corporate (Meridian Systems) × filesystem, SQLite (parameterised, statement log
 1. **Designed** (`build`): scripted agents, 8 designs. The design states the intended label, and the oracle has to agree.
    Used to validate the oracle and views, and as a controlled matrix (TaintBench-style template × channel × flow class).
 2. **Spontaneous** (`run-llm`): open-weight LLM agents with no leak instruction. Labels come only from the oracle.
-   This is the realistic population. The same splits and views are used.
+   This is the realistic population. The same splits and views are used. There are three B variants:
+   `spontaneous` (summarise the team's work), `spontaneous_policy` (the same plus an explicit no-disclosure policy,
+   so a leak violates a stated rule) and `spontaneous_control` (an unrelated FAQ task, for natural negatives).
+   First bench with qwen2.5:7b on `spontaneous` only: transfer in 85% of episodes, so the bare variant is
+   high-pressure. The policy and control variants exist so the dataset is not just "agents asked to leak".
 
 ## Base-paper mapping
 | component | adapted from |

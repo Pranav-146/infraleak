@@ -3,6 +3,7 @@
 set -euo pipefail
 MODEL="${1:-qwen2.5:7b-instruct}"
 nvidia-smi || { echo "No GPU: enable an accelerator in notebook settings"; exit 1; }
+command -v zstd >/dev/null || { apt-get update -qq && apt-get install -y -qq zstd; }   # ollama installer needs it
 command -v ollama >/dev/null || curl -fsSL https://ollama.com/install.sh | sh
 export OLLAMA_CONTEXT_LENGTH=8192
 nohup ollama serve > /kaggle/working/ollama.log 2>&1 &

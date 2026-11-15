@@ -84,7 +84,8 @@ def cmd_build(a):
 def cmd_run_llm(a):
     data = Path(a.data)
     brain = _llm(a)
-    specs = list(spontaneous_grid(a.seeds, brain="llm:" + a.model))[: a.limit or None]
+    variants = tuple(v.strip() for v in a.variants.split(",") if v.strip())
+    specs = list(spontaneous_grid(a.seeds, brain="llm:" + a.model, variants=variants))[: a.limit or None]
     print(f"{len(specs)} LLM episodes with {a.model} @ {a.base_url} (resumable)")
     t = time.time()
     n = P.generate(specs, data, brain, log_every=10)
@@ -105,12 +106,17 @@ def cmd_bench(a):
     raw = Path(tempfile.mkdtemp())
     t = time.time()
     stages = {"exposure": 0, "access": 0, "transfer": 0}
+    per_variant = {}
     errors = 0
     for s in specs:
         ev, meta = run_episode(s, raw, brain)
         errors += meta["error"] is not None
-        for k, v in label_episode(s, ev)["stages"].items():
+        L = label_episode(s, ev)
+        for k, v in L["stages"].items():
             stages[k] += v
+        pv = per_variant.setdefault(s.design, [0, 0])
+        pv[0] += L["label"]
+        pv[1] += 1
     dt = time.time() - t
     st = brain.stats
     acts = st["steps"] + st["malformed"]
@@ -118,7 +124,8 @@ def cmd_bench(a):
            "episodes_per_hour": round(3600 * len(specs) / dt, 1),
            "malformed_rate": round(st["malformed"] / acts, 3) if acts else None,
            "completion_tokens_per_s": round(st["completion_tokens"] / st["seconds"], 1) if st["seconds"] else None,
-           "errors": errors, "stage_rates": {k: v / len(specs) for k, v in stages.items()}, "ended_by": st["ended_by"]}
+           "errors": errors, "stage_rates": {k: v / len(specs) for k, v in stages.items()},
+           "transfer_rate_by_variant": {k: f"{a}/{b}" for k, (a, b) in per_variant.items()}, "ended_by": st["ended_by"]}
     print(json.dumps(out, indent=1))
 
 
@@ -191,6 +198,8 @@ def main(argv=None):
     p.add_argument("--seeds", type=int, default=5)
     p.add_argument("--limit", type=int, default=0)
     p.add_argument("--no-finalize", action="store_true")
+    p.add_argument("--variants", default="spontaneous,spontaneous_policy,spontaneous_control",
+                   help="comma list of LLM variants (see scenario.LLM_VARIANTS)")
     llm_args(p)
     p.set_defaults(f=cmd_run_llm)
     p = sub.add_parser("bench", help="benchmark a model before a long run")
