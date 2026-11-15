@@ -23,6 +23,7 @@ pip install pyyaml jsonschema requests pytest     # Python >= 3.10, git and sqli
 make test       # 24 tests: matching, oracle, 3 backends, host tier, views, splits, tamper check, LLM brain, figures
 make data       # 3,840 designed episodes -> labels -> freeze -> splits -> views -> baselines -> figures (~2 min, CPU)
 make data-host  # same + host tier recorded with real strace (Linux/WSL only, ~9 min)
+python -m infraleak.cli analyze --data data/llm   # funnel, negative types, label audit, alarm rates per group
 make show     # one episode printed through every observer view
 make verify   # re-hash raw logs + labels against MANIFEST and re-run the oracle
 ```
@@ -108,6 +109,20 @@ What the curve shows:
   benign FAQ lookup looks the same as a leak (FPR 0.88; 1.00 on the git split).
 - On **unseen flow class** (paraphrase), every baseline at every vantage is at exactly 0.
 That gap is what the learned detector (Phase II) has to close.
+
+## Real LLM agents (qwen2.5:7b, 720 episodes): `reports/llm_qwen2.5-7b/FINDINGS.md`
+![funnel](reports/llm_qwen2.5-7b/figures/funnel.png)
+
+- An explicit no-disclosure policy only reduces leaks from **79% to 69%**. Once B reads A's note it forwards the
+  secret 90–100% of the time.
+- Under the policy, leaks shift from IDs and dollar figures to names and plans, so pattern DLP recall drops from 0.87
+  to 0.66. All paraphrase-only leaks occur under the policy.
+- In 17% of episodes agent A *claims* to have saved a note without ever calling `write`.
+- Caveat: here the metadata read alarm looks near-perfect, because reading almost always meant leaking and only 19
+  episodes are hard negatives (read but withheld). It fires on all 19. The designed set is what measures this
+  failure in a controlled way.
+- Labels audited: 30 episodes by hand (30/30 agree), plus an automated partial-leak scan of all 365 negatives
+  (0 missed leaks).
 
 ## Honest limitations
 - The designed episodes are scripted, so content baselines saturate in-distribution. They exist to check the oracle and

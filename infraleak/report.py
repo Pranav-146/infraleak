@@ -41,7 +41,7 @@ def _style(plt):
                          "axes.axisbelow": True, "legend.frameon": False})
 
 
-def make_figures(results_dir: Path):
+def make_figures(results_dir: Path, title: str | None = None):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -77,7 +77,7 @@ def make_figures(results_dir: Path):
     ax.set_ylim(-0.08, 1.03)
     ax.set_xlim(-0.3, len(views) - 0.3 + 1.3)
     ax.set_ylabel("best baseline: recall − false-positive rate")
-    ax.set_title("Detection above chance collapses as the observer sees less  (oracle = 1.0 on every view)",
+    ax.set_title(title or "Best baseline above chance at each observer view  (oracle = 1.0 on every view)",
                  loc="left", color=INK, fontsize=12)
     ax.text(0, -0.30, "more visibility  →  less visibility", transform=ax.transAxes, color=INK2, fontsize=9)
     ax.legend(loc="upper right", ncol=4, fontsize=9, bbox_to_anchor=(1, 1.0))
